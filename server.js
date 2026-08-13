@@ -2,7 +2,10 @@
 // Simple server-side proxy for market quotes (demo). Do not expose private keys in client-side code.
 
 const express = require('express');
-const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
+// Use Node 18+ global fetch. Ensure you're running Node 18+ or provide a fetch polyfill.
+if (typeof fetch === 'undefined') {
+  console.warn('Global fetch is not available. Please run this server with Node 18+ or add a fetch polyfill.');
+}
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 require('dotenv').config();
@@ -33,6 +36,13 @@ function validateSymbols(raw) {
 
 app.get('/api/quote', async (req, res) => {
   try {
+    if (typeof fetch === 'undefined') {
+      return res.status(500).json({
+        error: 'server_fetch_unavailable',
+        message: 'Global fetch is not available on this Node runtime. Use Node 18+ or add a fetch polyfill.'
+      });
+    }
+
     const symbols = validateSymbols(req.query.symbols);
     if (!symbols) return res.status(400).json({ error: 'missing or invalid symbols' });
 
@@ -48,7 +58,9 @@ app.get('/api/quote', async (req, res) => {
     const upstreamRes = await fetch(url, { method: 'GET' });
     if (!upstreamRes.ok) {
       const text = await upstreamRes.text();
-      return res.status(502).json({ error: 'upstream error', details: text });
+      // Log upstream details server-side, but avoid exposing raw upstream text in production
+      console.error('Upstream fetch error', upstreamRes.status, text ? text.slice(0, 200) : '');
+      return res.status(502).json({ error: 'upstream error' });
     }
     const json = await upstreamRes.json();
 
