@@ -101,7 +101,7 @@
             cursor:pointer;
             border-left:3px solid transparent;
         }
-        .watchlist-item:hover { background:var(--hover); border-left-color:var(--accent-blue); }
+        .watchlist-item:hover { background:var(--bg-card); border-left-color:var(--accent-blue); }
         .watchlist-item.selected { border-left-color:var(--accent-gold); }
         .main-content {
             background:var(--bg-primary);
@@ -234,7 +234,7 @@
 <body>
 <div class="trading-app">
     <nav class="top-nav">
-        <div class="app-logo">📊 NIFTY 50 LIVE TRADER (No API Key)</div>
+        <div class="app-logo">📊 NIFTY 50 LIVE TRADER</div>
         <div class="market-ticker" id="marketTicker"></div>
         <div class="nav-actions">
             <button class="nav-btn active" onclick="switchView('trading')">📈 Trading</button>
@@ -345,6 +345,20 @@ const NGVS_SCORES = {
     "SHRIRAMFIN.NS":63.8
 };
 
+// Fallback pricing data for initial load
+const FALLBACK_PRICES = {
+    "RELIANCE.NS": { price: 2850.50, change: 1.25, name: "RELIANCE", ngvs: 86.8 },
+    "TCS.NS": { price: 3450.00, change: -0.50, name: "TCS", ngvs: 89.7 },
+    "HDFCBANK.NS": { price: 1650.75, change: 2.10, name: "HDFCBANK", ngvs: 91.2 },
+    "INFY.NS": { price: 1890.20, change: 0.85, name: "INFY", ngvs: 87.5 },
+    "ICICIBANK.NS": { price: 1045.50, change: 1.50, name: "ICICIBANK", ngvs: 81.5 },
+    "HINDUNILVR.NS": { price: 2340.25, change: -1.20, name: "HINDUNILVR", ngvs: 80.2 },
+    "KOTAKBANK.NS": { price: 1890.00, change: 0.95, name: "KOTAKBANK", ngvs: 84.2 },
+    "ITC.NS": { price: 385.40, change: 1.10, name: "ITC", ngvs: 83.8 },
+    "SBIN.NS": { price: 650.75, change: 2.35, name: "SBIN", ngvs: 78.2 },
+    "BHARTIARTL.NS": { price: 1310.20, change: 0.75, name: "BHARTIARTL", ngvs: 82.3 }
+};
+
 const stockData = {};
 let watchlist = NIFTY50_SYMBOLS.slice(0, 10);
 let selectedSymbol = 'HDFCBANK.NS';
@@ -353,12 +367,67 @@ let orderType = 'market';
 let positions = [];
 let orders = [];
 let chart, candleSeries, volumeSeries, smaSeries;
-</script>
 
-<!-- Load consolidated client fetch implementation -->
-<script src="client-fetch-update.js"></script>
+// ==================== STOCK DATA FETCHER ====================
+async function fetchStockPrice(symbol) {
+    try {
+        const proxyUrl = `https://api.allorigins.win/raw?url=`;
+        const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1y`;
+        const fullUrl = proxyUrl + encodeURIComponent(yahooUrl);
+        
+        const response = await fetch(fullUrl, { timeout: 5000 });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const data = await response.json();
+        if (!data.chart || !data.chart.result || !data.chart.result[0]) return null;
+        
+        const result = data.chart.result[0];
+        const quotes = result.quote;
+        const latestQuote = quotes[quotes.length - 1];
+        
+        if (!latestQuote || latestQuote.close === null) return null;
+        
+        const currentPrice = latestQuote.close;
+        const previousClose = result.meta.previousClose;
+        const change = previousClose ? ((currentPrice - previousClose) / previousClose) * 100 : 0;
+        
+        return {
+            price: currentPrice,
+            change: change,
+            name: symbol.replace('.NS', ''),
+            ngvs: NGVS_SCORES[symbol] || 75
+        };
+    } catch (error) {
+        console.warn(`Fetch failed for ${symbol}, using fallback`);
+        return null;
+    }
+}
 
-<script>
+async function fetchAllPrices() {
+    console.log('Fetching stock prices...');
+    
+    const promises = watchlist.map(async (symbol) => {
+        const data = await fetchStockPrice(symbol);
+        if (data) {
+            stockData[symbol] = data;
+        } else if (!stockData[symbol]) {
+            // Use fallback data
+            stockData[symbol] = FALLBACK_PRICES[symbol] || {
+                price: 1000 + Math.random() * 2000,
+                change: (Math.random() - 0.5) * 5,
+                name: symbol.replace('.NS', ''),
+                ngvs: NGVS_SCORES[symbol] || 75
+            };
+        }
+    });
+    
+    await Promise.all(promises);
+    
+    renderWatchlist();
+    updatePortfolioSummary();
+    updateMarketTicker();
+}
+
 // ==================== UI Updates ====================
 function renderWatchlist() {
     const container = document.getElementById('watchlist');
@@ -402,7 +471,7 @@ function addSelectedStock() {
     const match = NIFTY50_SYMBOLS.find(sym => sym.includes(query) && !watchlist.includes(sym));
     if (match) {
         watchlist.push(match);
-        renderWatchlist();
+        fetchAllPrices();
         document.getElementById('stockSearch').value = '';
     } else {
         alert('Not found or already added.');
@@ -575,7 +644,7 @@ function updatePortfolioSummary() {
     const dayChange = totalValue - totalCost;
     document.getElementById('portfolioValue').innerText = `₹${totalValue.toFixed(2)}`;
     const changeEl = document.getElementById('portfolioDayChange');
-    changeEl.innerText = `${dayChange >= 0 ? '+' : ''}₹${dayChange.toFixed(2)} (${totalCost ? (dayChange/totalCost*100).toFixed(2) : 0}%)`;
+    changeEl.innerText = `${dayChange >= 0 ? '+' : ''}��${dayChange.toFixed(2)} (${totalCost ? (dayChange/totalCost*100).toFixed(2) : 0}%)`;
     changeEl.className = dayChange >= 0 ? 'positive' : 'negative';
 }
 function updateMarketTicker() {
@@ -601,7 +670,6 @@ function switchView(view) {
     }
 }
 
-// Keyboard shortcut
 document.addEventListener('keydown', e => {
     if (e.key === 'Enter' && document.activeElement.id === 'stockSearch') addSelectedStock();
 });
@@ -610,7 +678,7 @@ document.addEventListener('keydown', e => {
 window.onload = async () => {
     initChart();
     await fetchAllPrices();
-    setInterval(fetchAllPrices, 60000); // refresh every 60 seconds
+    setInterval(fetchAllPrices, 60000);
     selectStock(selectedSymbol);
 };
 </script>
