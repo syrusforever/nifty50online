@@ -10,14 +10,16 @@ const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 require('dotenv').config();
 
+const QuickLRU = require('quick-lru');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const CACHE_TTL = parseInt(process.env.CACHE_TTL || '15', 10) * 1000; // seconds -> ms
 
 app.use(cors()); // restrict in production: cors({ origin: 'https://yourdomain.com' })
 
-// Simple in-memory cache: { key: { ts: <ms>, data: <object> } }
-const cache = new Map();
+// LRU cache with max size and TTL
+const cache = new QuickLRU({ maxSize: 500 });
 
 const limiter = rateLimit({
   windowMs: 60_000, // 1 minute
