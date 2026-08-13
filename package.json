@@ -1,0 +1,10 @@
+{
+  "name": "nifty50online-dev",
+  "version": "0.1.0",
+  "description": "Dev helper to serve the static NIFTY50LIVE trading app locally",
+  "private": true,
+  "scripts": {
+    "start": "npx serve . -p 8000"
+  },
+  "devDependencies": {}
+}
