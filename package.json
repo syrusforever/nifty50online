@@ -4,7 +4,8 @@
   "description": "Dev helper to serve the static NIFTY50LIVE trading app locally",
   "private": true,
   "scripts": {
-    "start": "npx serve . -p 8000"
+    "start": "npx serve . -p 8000",
+    "serve:proxy": "node server.js"
   },
   "devDependencies": {}
 }
