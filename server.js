@@ -1,0 +1,68 @@
+// server.js
+// Simple server-side proxy for market quotes (demo). Do not expose private keys in client-side code.
+
+const express = require('express');
+const fetch = (...args) => import('node-fetch').then(m => m.default(...args));
+const rateLimit = require('express-rate-limit');
+const cors = require('cors');
+require('dotenv').config();
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const CACHE_TTL = parseInt(process.env.CACHE_TTL || '15', 10) * 1000; // seconds -> ms
+
+app.use(cors()); // restrict in production: cors({ origin: 'https://yourdomain.com' })
+
+// Simple in-memory cache: { key: { ts: <ms>, data: <object> } }
+const cache = new Map();
+
+const limiter = rateLimit({
+  windowMs: 60_000, // 1 minute
+  max: 60, // adjust as needed
+});
+app.use(limiter);
+
+// Very small whitelist/validation for symbols: letters, digits, comma
+function validateSymbols(raw) {
+  if (!raw) return null;
+  const cleaned = String(raw).toUpperCase().replace(/[^A-Z0-9,]/g, '');
+  if (!cleaned) return null;
+  // Optionally further restrict to NIFTY50 list if you want
+  return cleaned;
+}
+
+app.get('/api/quote', async (req, res) => {
+  try {
+    const symbols = validateSymbols(req.query.symbols);
+    if (!symbols) return res.status(400).json({ error: 'missing or invalid symbols' });
+
+    const cacheKey = `quote:${symbols}`;
+    const now = Date.now();
+    const cached = cache.get(cacheKey);
+    if (cached && (now - cached.ts) < CACHE_TTL) {
+      return res.json(cached.data);
+    }
+
+    // Example upstream call to Yahoo Finance
+    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbols)}`;
+    const upstreamRes = await fetch(url, { method: 'GET' });
+    if (!upstreamRes.ok) {
+      const text = await upstreamRes.text();
+      return res.status(502).json({ error: 'upstream error', details: text });
+    }
+    const json = await upstreamRes.json();
+
+    // Basic validation: ensure object shape
+    if (!json || !json.quoteResponse) return res.status(502).json({ error: 'unexpected upstream response' });
+
+    cache.set(cacheKey, { ts: now, data: json });
+    return res.json(json);
+  } catch (err) {
+    console.error('Proxy error', err);
+    return res.status(500).json({ error: 'internal error' });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`Server proxy listening on ${PORT}`);
+});

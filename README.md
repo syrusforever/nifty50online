@@ -1,52 +1,41 @@
-# NIFTY 50 LIVE TRADER
+NIFTY50 Online — demo trading UI
 
-Static demo of a NIFTY 50 trading UI (no backend). This repo contains a single-file, client-side trading demo that fetches quote data via a public proxy and simulates orders locally.
+This repository contains a single-file, client-side trading demo (index.html) and a small server-side proxy example (server.js) to safely fetch market quotes.
 
-Important: the app is a demo only — it does not place real trades and uses public/free endpoints that may be rate-limited or blocked.
+Why the proxy?
+- Browser-based calls to Yahoo Finance were previously done via a public proxy; that is unreliable and unsafe for production.
+- The server-side proxy centralizes upstream requests, hides any API keys, and implements caching and rate-limiting.
 
-## Where the app lives
-- index.html — the single-file trading app (now served from the repository root on the setup branch)
-- trading — original single-file app (kept for reference)
-- index.html.placeholder — backed-up original placeholder HTML
+Quick start (development)
 
-## How to run locally
-The repository includes a tiny dev helper. From the repository root:
+1) Install dependencies (for the proxy):
 
-1. Install (optional) and run the local static server:
+   npm install express express-rate-limit cors node-fetch dotenv
 
-```bash
-npm install
-npm start
-```
+2) Start the static preview (serves index.html on port 8000):
 
-This runs a simple static server on http://localhost:8000 and serves index.html.
+   npm start
 
-Alternatively you can use Python's http.server:
+3) In a second terminal, start the proxy (default port 3000):
 
-```bash
-# from repo root
-echo "Using index.html as the app" && python3 -m http.server 8000
-```
+   npm run serve:proxy
 
-## Limitations and recommendations
-- Data source: the app requests Yahoo Finance using a public AllOrigins proxy (`https://api.allorigins.win/raw?url=...`). Public proxies can be unreliable, rate-limited, or blocked. The app falls back to generated mock prices when the fetch fails.
-- CORS and keys: Yahoo endpoints are not intended for direct browser usage. For production, run a small server-side proxy or use a supported market-data provider that offers CORS-enabled endpoints or an official API key.
-- Security: do not embed private API keys in client-side code. If you add a provider that requires a key, keep the key on a server you control and proxy requests.
-- Reliability: consider using a paid market-data provider (IEX, Polygon, Alpha Vantage, Twelve Data, etc.) or exchange-licensed feeds if you need production-grade data and SLAs.
+4) Open the app in your browser:
 
-## Next steps I applied
-- Copied the single-file app into `index.html` on branch `setup/trading-app` so the app is served from the repo root.
-- Added `package.json` with a `start` script to make local preview easier.
-- Backed up the old placeholder to `index.html.placeholder`.
+   http://localhost:8000
 
-## What I will do next (and what I can't do from here)
-- I created a new branch `setup/trading-app` containing the changes above.
-- I can create a `gh-pages` branch with the same files so GitHub Pages can serve the app automatically; I will create it next.
-- I cannot create the GitHub Pull Request from this environment. After I push the `gh-pages` branch I will tell you exactly how to open the PR from `setup/trading-app` into `main` (it’s a one-click operation in the GitHub UI) and I can provide a suggested PR title and body.
+Notes for development
+- The client calls the relative path `/api/quote` — in production you should run a reverse-proxy so both the UI and API share the same origin, or update the client to call the API origin explicitly.
+- The proxy currently uses a small in-memory cache. For production, use Redis or similar when running multiple instances.
+- Restrict CORS in production (the example enables CORS for development convenience).
 
----
+Production hardening
+- Do not use public proxies from client-side code. Keep API keys on the server.
+- Pin or vendor third-party libraries (consider bundling lightweight-charts instead of CDN usage), add SRI if you must use CDN.
+- Add Content Security Policy (CSP) headers and move inline scripts to an external bundle.
+- Run secret scanning and dependency scanning (Dependabot, Snyk, or GitHub Advanced Security).
 
-If you'd like, I can also:
-- Split the single-file app into `index.html` + `assets/` and smaller JS files for maintainability.
-- Add a small Node.js Express proxy example (server.js) to demonstrate secure server-side data fetching.
-
+If you want, I can:
+- Update the client to explicitly call http://localhost:3000 during development (helps when running the static server on 8000 and the proxy on 3000).
+- Replace innerHTML usage with safe DOM APIs to prevent XSS.
+- Add a dev script that runs both static server and proxy concurrently with a single command.
