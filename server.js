@@ -14,12 +14,15 @@ const QuickLRU = require('quick-lru');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+// CACHE_TTL in seconds in .env; convert to ms here
 const CACHE_TTL = parseInt(process.env.CACHE_TTL || '15', 10) * 1000; // seconds -> ms
+// CACHE_MAX_SIZE controls LRU capacity (number of distinct keys)
+const CACHE_MAX_SIZE = parseInt(process.env.CACHE_MAX_SIZE || '500', 10);
 
 app.use(cors()); // restrict in production: cors({ origin: 'https://yourdomain.com' })
 
-// LRU cache with max size and TTL
-const cache = new QuickLRU({ maxSize: 500 });
+// LRU cache with max size and TTL (maxAge in ms)
+const cache = new QuickLRU({ maxSize: CACHE_MAX_SIZE, maxAge: CACHE_TTL });
 
 const limiter = rateLimit({
   windowMs: 60_000, // 1 minute
@@ -49,10 +52,9 @@ app.get('/api/quote', async (req, res) => {
     if (!symbols) return res.status(400).json({ error: 'missing or invalid symbols' });
 
     const cacheKey = `quote:${symbols}`;
-    const now = Date.now();
     const cached = cache.get(cacheKey);
-    if (cached && (now - cached.ts) < CACHE_TTL) {
-      return res.json(cached.data);
+    if (cached) {
+      return res.json(cached);
     }
 
     // Example upstream call to Yahoo Finance
@@ -69,7 +71,7 @@ app.get('/api/quote', async (req, res) => {
     // Basic validation: ensure object shape
     if (!json || !json.quoteResponse) return res.status(502).json({ error: 'unexpected upstream response' });
 
-    cache.set(cacheKey, { ts: now, data: json });
+    cache.set(cacheKey, json);
     return res.json(json);
   } catch (err) {
     console.error('Proxy error', err);
